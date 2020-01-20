@@ -1,0 +1,89 @@
+import numpy as np
+
+class HMM(object):
+    def __init__(self, A, B): #A,B are the transition and emission matrices which will be represented using nested dicts.
+        self.A = A
+        self.B = B
+        self.states = list(A.keys()) #Gets the state space
+        self.outputs = list(B.keys()) #redundant
+        
+    def next_state(self,current_state): #takes in the state at t-1, and outputs a state using transition probabilities at time t
+        return np.random.choice(self.states, p = [self.A[current_state][j] for j in self.states])
+    
+    def next_output(self,current_state): #produces an output at time t, given the state at time t
+        getkey = self.B[current_state]
+        out = list(getkey.keys())
+        return np.random.choice(out, p = [self.B[current_state][j] for j in out])
+    
+    def generate_states(self, current_state, n = 10): #generate a sequence of future outputs of the HMM, given an initial state
+        curr = current_state
+        future_outputs = []
+        for i in range(n):
+            next_state = self.next_state(curr)
+            #print(next_state) "hides the state outputs, can show these for pedagogy"
+            future_outputs.append(self.next_output(curr)) #first output is always based on the initial state
+            curr = next_state #update state
+        return future_outputs
+        
+
+#potential example with a chicken laying eggs based on the weather
+a = {'Sunny': {'Sunny' : .6, 'Cloudy' : .3, 'Rainy' : .1}, 'Cloudy' : {'Sunny' : .3, 'Cloudy' : .4, 'Rainy' : .3}, 'Rainy':
+     {'Sunny' : .2, 'Cloudy' : .4, 'Rainy': .4}}
+b = {'Sunny':{'Egg' :.8, 'Nothing':.2},'Cloudy':{'Egg' :.55, 'Nothing':.45},'Rainy':{'Egg' :.2, 'Nothing':.8}}
+
+chicken_hidd = HMM(A=a,B=b)
+
+#dice example
+dice_transition = {'Fair Dice' : {'Fair Dice' : .6, 'Loaded Dice': .4}, 'Loaded Dice' : { 'Fair Dice' : .6 ,'Loaded Dice' : .4}}
+dice_values = {'Fair Dice' : {'1': 1/6, '2': 1/6, '3': 1/6, '4': 1/6, '5': 1/6, '6': 1/6}, 'Loaded Dice' : {'1' : .05,
+                                                                                                           '2' : .05,
+                                                                                                           '3' : .05,
+                                                                                                           '4' : .05,
+                                                                                                           '5' : .05,
+                                                                                                           '6' : .75}}
+dice_states = ('Fair Dice', 'Loaded Dice')
+dice_start = {'Fair Dice': 0.99, 'Loaded Dice': 0.01}
+
+dice_HMM = HMM(A = dice_transition, B = dice_values)
+
+obs = dice_HMM.generate_states(current_state = 'Fair Dice', n = 15)
+
+print(obs)
+
+#code for viterbi, uses the pseudo code from wikipedia : https://en.wikipedia.org/wiki/Viterbi_algorithm
+def vit(obs,init,A,B): # parameters are the observation sequence, matrices A, B as defined earlier, and an intial state probability matrix
+    states = list(A.keys()) # gets the names of states
+    T = len(obs)
+    viti = [{} for _ in range(T)] 
+    backpointer = [{} for _ in range(T)]
+    supremum = 0
+    sup_state = None
+    
+    #initialize a max, and the corresponding state
+    for s in states:
+        viti[0][s] = init[s] * B[s][obs[0]]
+        backpointer[0][s] = None
+        
+        if(viti[0][s] > supremum):
+            supremum = viti[0][s]
+            sup_state = s
+
+    #recursion step    
+    for t in range (1,T):
+        for s in states:
+            viti[t][s] = max(viti[t-1][prev]*A[prev][s]*B[s][obs[t]] for prev in states)
+            backpointer[t][s] = states[np.argmax([viti[t-1][prev]*A[prev][s]*B[s][obs[t]] for prev in states])]\
+       
+     
+    #backtrack        
+    out =[] #output sequence of states
+    out.append(states[np.argmax([viti[T][k]] for k in states)]) 
+    previous = states[np.argmax([viti[T][k]] for k in states)]
+    
+    
+    for j in range(len(viti)-2,-1,-1):
+        out.insert(0, backpointer[j + 1][previous])
+        previous = backpointer[j + 1][previous]
+    return out
+
+vit(obs = obs, init= dice_start, A = dice_transition, B = dice_values)
